@@ -9,8 +9,10 @@ require(['/api/preconfigured-netflux.js',
     var logMsg = function (s) { $backscroll.val(function (i, v) { return v + '\n' + s; }); };
 
     networkPromise.then((network) => {
-        network.join((''+window.location.hash).replace('#', '')).then(function(wc) {
-
+        network.join(window.location.hash.substring(1) || null).then(function(wc) {
+            if (window.location.hash.substring(1) !== wc.id) {
+                window.location.hash = '#' + wc.id;
+            }
             webchannel = wc;
             wc.on('message', function (msg, sender) {
                 logMsg('<' + sender + '> ' + msg);
@@ -45,6 +47,7 @@ require(['/api/preconfigured-netflux.js',
             $backscroll.scrollTop($backscroll[0].scrollHeight);
         };
 
+        logMsg('connected');
         $entry.on('keydown', function (evt) {
             if (evt.keyCode !== 13) { return; }
             send($entry.val(), function (err) {
@@ -60,8 +63,7 @@ require(['/api/preconfigured-netflux.js',
             if(typeof webchannel !== "undefined") {
                 webchannel.bcast(msg);
                 cb();
-            }
-            else {
+            } else {
                 cb("Not connected to server");
             }
         };
