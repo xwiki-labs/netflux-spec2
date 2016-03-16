@@ -1,0 +1,33 @@
+html, body{
+    padding: 0px;
+    margin: 0px;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+#chatflux-backscroll {
+    width: 100%;
+    height: 100vh;
+    max-width: 100%;
+    max-height: 95vh;
+    font-size: 18px;
+    background-color: #073642;
+    color: #839496;
+    overflow-x: hidden;
+    overflow-y: auto;
+    /* disallow textarea resizes */
+    resize: none;
+    border: 0px;
+}
+#chatflux-entry {
+    position: fixed;
+    width: 100%;
+    display: block;
+    height: 5vh;
+    box-sizing: border-box;
+    border: 0px;
+    font-size: 18px;
+    background-color: #073642;
+    color: #839496;
+    margin-top: -3px;
+    margin-bottom: 5px;
+}

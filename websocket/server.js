@@ -1,6 +1,5 @@
 ;(function () { 'use strict';
 const Crypto = require('crypto');
-const WebSocket = require('ws');
 
 const LAG_MAX_BEFORE_DISCONNECT = 30000;
 const LAG_MAX_BEFORE_PING = 15000;
@@ -31,8 +30,8 @@ const sendChannelMessage = function (ctx, channel, msgStruct) {
 };
 
 dropUser = function (ctx, user) {
-    if (user.socket.readyState !== WebSocket.CLOSING
-        && user.socket.readyState !== WebSocket.CLOSED)
+    if (user.socket.readyState !== 2 /* WebSocket.CLOSING */
+        && user.socket.readyState !== 3 /* WebSocket.CLOSED */)
     {
         try {
             user.socket.close();
@@ -81,6 +80,7 @@ const handleMessage = function (ctx, user, msg) {
             sendMsg(ctx, user, [seq, 'ERROR', 'ENOENT', obj]);
             return;
         }
+        sendMsg(ctx, user, [seq, 'ACK', chanName]);
         let chanName = obj || randName();
         let chan = ctx.channels[chanName] = ctx.channels[chanName] || [];
         chan.id = chanName;

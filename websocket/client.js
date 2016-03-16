@@ -1,16 +1,11 @@
 /*global: WebSocket */
-
+define(() => {
+'use strict';
 const MAX_LAG_BEFORE_PING = 15000;
 const MAX_LAG_BEFORE_DISCONNECT = 30000;
 const PING_CYCLE = 5000;
 
-const getChannelIndex = (ctx, chanId) => {
-    let i = -1;
-    ctx.channels.forEach((chan, ii) => {
-        if (chan.id === chanId) { i = ii; }
-    });
-    return i
-};
+const now = () => new Date().getTime();
 
 const networkSendTo = (ctx, peerId, content) => {
     const seq = ctx.seq++;
@@ -21,8 +16,8 @@ const networkSendTo = (ctx, peerId, content) => {
 };
 
 const channelBcast = (ctx, chanId, content) => {
-    const chanIdx = getChannelIndex(ctx, chanId);
-    if (chanIdx === -1) { throw new Error("no such channel " + chanId); }
+    const chan = ctx.channels[chanId];
+    if (!chan) { throw new Error("no such channel " + chanId); }
     const seq = ctx.seq++;
     ctx.ws.send(JSON.stringify([seq, 'MSG', chanId, content]));
     return new Promise((res, rej) => {
@@ -31,9 +26,9 @@ const channelBcast = (ctx, chanId, content) => {
 };
 
 const channelLeave = (ctx, chanId, reason) => {
-    const chanIdx = getChannelIndex(ctx, chanId);
-    if (chanIdx === -1) { throw new Error("no such channel " + chanId); }
-    ctx.channels.splice(i, 1);
+    const chan = ctx.channels[chanId];
+    if (!chan) { throw new Error("no such channel " + chanId); }
+    delete ctx.channels[chanId];
     ctx.ws.send(JSON.stringify([ctx.seq++, 'LEAVE', chanId, reason]));
 };
 
@@ -50,37 +45,49 @@ const mkChannel = (ctx, id) => {
         onMessage: [],
         onJoin: [],
         onLeave: [],
-        members: []
+        members: [],
+        jSeq: ctx.seq++
     };
     const chan = {
         _: internal,
         id: id,
         members: internal.members,
-        bcast: (msg) => channelBcast(ctx, id, msg),
-        leave: (reason) => channelLeave(ctx, id, reason),
-        on: makeEventHandlers(ctx, { message: onMessage, join: join, leave: leave })
+        bcast: (msg) => channelBcast(ctx, chan.id, msg),
+        leave: (reason) => channelLeave(ctx, chan.id, reason),
+        on: makeEventHandlers(ctx, { message:
+            internal.onMessage, join: internal.onJoin, leave: internal.onLeave })
     };
-    ctx.channels.push(chan);
-    ctx.ws.send(JSON.stringify([ctx.seq++, 'JOIN', id]));
-    return new Promise((res, rej) {
+    ctx.requests[internal.jSeq] = chan;
+    ctx.ws.send(JSON.stringify([internal.jSeq, 'JOIN', id]));
+
+    return new Promise((res, rej) => {
         chan._.resolve = res;
         chan._.reject = rej;
     })
 };
 
 const mkNetwork = (ctx) => {
-    return {
+    const network = {
         webChannels: ctx.channels,
         getLag: () => (ctx.lag),
         sendto: (peerId, content) => (networkSendTo(ctx, peerId, content)),
-        join: (chanId) => (mkChannel(ctx, chanId))
+        join: (chanId) => (mkChannel(ctx, chanId)),
         on: makeEventHandlers(ctx, { message: ctx.onMessage, disconnect: ctx.onDisconnect })
     };
+    network.__defineGetter__("webChannels", () => {
+        return Object.keys(ctx.channels).map((k) => (ctx.channels[k]));
+    });
+    return network;
 };
 
-const onMessage = (ctx, msg) => {
-    let msg = JSON.parse(msg);
+const onMessage = (ctx, evt) => {
+    let msg;
+    try { msg = JSON.parse(evt.data); } catch (e) { console.log(e.stack); console.log(msgStr); return; }
     if (msg[0] !== 0) {
+        if (msg[1] === 'PONG') {
+            ctx.lag = now() - Number(msg[2]);
+            return;
+        }
         const req = ctx.requests[msg[0]];
         if (!req) {
             console.log("error: " + JSON.stringify(msg));
@@ -88,6 +95,13 @@ const onMessage = (ctx, msg) => {
         }
         delete ctx.requests[msg[0]];
         if (msg[1] === 'ACK') {
+            if (req._) {
+                // Channel join request...
+                if (!msg[2]) { throw new Error("wrong type of ACK for channel join"); }
+                req.id = msg[2];
+                ctx.channels[req.id] = req;
+                return;
+            }
             req.resolve();
         } else if (msg[1] === 'ERROR') {
             req.reject({ type: msg[2], message: msg[3] });
@@ -101,24 +115,20 @@ const onMessage = (ctx, msg) => {
 
         setInterval(() => {
             if (now() - ctx.timeOfLastMessage < MAX_LAG_BEFORE_PING) { return; }
-            ws.send(JSON.stringify([ctx.seq++, 'PING', now()]));
+            ctx.ws.send(JSON.stringify([ctx.seq++, 'PING', now()]));
             if (now() - ctx.timeOfLastMessage > MAX_LAG_BEFORE_DISCONNECT) {
                 ctx.ws.close();
             }
         }, PING_CYCLE);
 
         return;
-    } else if (!socket.uid) {
+    } else if (!ctx.uid) {
         // extranious message, waiting for an ident.
         return;
     }
     if (msg[1] === 'PING') {
         msg[1] = 'PONG';
         ws.send(JSON.stringify(msg));
-        return;
-    }
-    if (msg[1] === 'PONG') {
-        ctx.lag = now() - Number(msg[2]);
         return;
     }
 
@@ -153,7 +163,7 @@ const onMessage = (ctx, msg) => {
     if (msg[2] === 'JOIN') {
         const chan = ctx.channels[msg[3]];
         if (!chan) {
-            console.log("join non-existant chan " + JSON.stringify(msg));
+            console.log("ERROR: join to non-existant chan " + JSON.stringify(msg));
             return;
         }
         // have we yet fully joined the chan?
@@ -201,6 +211,9 @@ const connect = (websocketURL) => {
     };
 
     return new Promise((resolve, reject) => {
-        ws.onopen = () => resolve(ctx.network);
+        ctx.ws.onopen = () => resolve(ctx.network);
     });
 };
+
+return { connect: connect };
+});

@@ -1,0 +1,17 @@
+{
+    "name": "chatflux",
+    "description": "realtime collaborative chat with netflux",
+    "version": "0.1.0",
+    "dependencies": {
+        "express": "~4.10.1",
+        "ws": "~0.4.32",
+        "level": "~1.4.0",
+        "nthen": "~0.1.1"
+    },
+    "devDependencies": {
+        "jshint": "~2.9.1"
+    },
+    "scripts": {
+        "lint": "jshint --config .jshintrc --exclude-path .jshintignore ."
+    }
+}
