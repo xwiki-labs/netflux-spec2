@@ -51,9 +51,7 @@ All Server->Client response messages begin with the sequence number which corres
 
 This message is a possible response to JOIN, LEAVE, MSG, and PING
 
-Server > client : [Seq, "ACK", Ack_content]
-
-__Note__ : *Ack_content* depends on the type of message. It can be an empty string (MSG), a channel name (JOIN, LEAVE) or a date (PING).
+Server > client : [Seq, "ACK"]
 
 ### **ERROR**
 
@@ -135,4 +133,4 @@ Server > Client (completed) : [0, "History_Keeper_Name", "MSG", Client_ID, 0 ]
 *"ClientC" will now regurlarly send "PING" messages to check the connectivity. The server will reply with a "PONG" :*
 
 * ClientC > server : [0,"PING",1459763610521]
-* Server > ClientC : [0,"ACK",1459763610521]
+* Server > ClientC : [0,"ACK"]
