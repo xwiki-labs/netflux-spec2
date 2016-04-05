@@ -3,7 +3,7 @@ const Crypto = require('crypto');
 
 const LAG_MAX_BEFORE_DISCONNECT = 30000;
 const LAG_MAX_BEFORE_PING = 15000;
-const HISTORY_KEEPER_ID = "_HISTORY_KEEPER_";
+const HISTORY_KEEPER_ID = Crypto.randomBytes(8).toString('hex');
 
 const USE_HISTORY_KEEPER = false;
 
@@ -23,7 +23,11 @@ const sendMsg = function (ctx, user, msg) {
 
 const sendChannelMessage = function (ctx, channel, msgStruct) {
     msgStruct.unshift(0);
-    channel.forEach(function (user) { sendMsg(ctx, user, msgStruct); });
+    channel.forEach(function (user) {
+      if(msgStruct[2] !== 'MSG' || user.id !== msgStruct[1]) { // We don't want to send back a message to its sender, in order to save bandwidth
+        sendMsg(ctx, user, msgStruct);
+      }
+    });
     if (USE_HISTORY_KEEPER && msgStruct[2] === 'MSG') {
         ctx.store.message(channel.id, JSON.stringify(msgStruct), function () { });
     }
@@ -133,7 +137,7 @@ const handleMessage = function (ctx, user, msg) {
             sendMsg(ctx, user, [seq, 'ERROR', err]);
             return;
         }
-        sendMsg(ctx, user, [seq, 'ACK', chan.id]]);
+        sendMsg(ctx, user, [seq, 'ACK', chan.id]);
         json.unshift(user.id);
         sendChannelMessage(ctx, chan, [user.id, 'LEAVE', chan.id]);
         chan.splice(idx, 1);
@@ -171,7 +175,7 @@ let run = module.exports.run = function (storage, socketServer) {
             pingOutstanding: false
         };
         ctx.users[user.id] = user;
-        sendMsg(ctx, user, [0, 'IDENT', user.id]);
+        sendMsg(ctx, user, [0, '', 'IDENT', user.id]);
         socket.on('message', function(message) {
             console.log('>'+message);
             try {

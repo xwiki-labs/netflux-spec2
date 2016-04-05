@@ -76,7 +76,7 @@ All server->client event notification messages begin with 0 and the source of th
 
 Sent as soon as the client connects, the server issues the client a unique ID :
 
-Server > client : [0, "IDENT", User_ID]
+Server > client : [0, "", "IDENT", User_ID]
 
 ### **JOIN**
 
@@ -96,41 +96,41 @@ Messages sent by users in a channel are forwarded to the recipients by the serve
 
 Server > Recipient (history / forward) : [0, Sender, "MSG", Recipient, Content]
 
-__Note__ : *Recipient* can be another client or a channel. *Sender* can be a client ID or the ID of the History Keeper.
+__Note__ : *Recipient* can be another client or a channel. *Sender* can be a client ID or the ID of the History Keeper. The sender won't receive a copy of his message in the channel.
 
 ## History keeper
 
-When a user joins a channel, you may want him to get all messages previsouly broadcasted to that channel. To do so, you can ask the history to a fake client ("_HISTORY_KEEPER_" by default) by sending to the server :
+When a user joins a channel, you may want him to get all messages previsouly broadcasted to that channel. To do so, you can ask the history to a fake client (16 random hexadecimal characters) by sending to the server :
 
-Client > server [Seq, "MSG", "_HISTORY_KEEPER_", "[\"GET_HISTORY\", Channel_name]"]
+Client > server [Seq, "MSG", "History_Keeper_Name", "[\"GET_HISTORY\", Channel_name]"]
 
 The server will reply by sending to that client all the messages in the right order, as if they had just been sent, and a "0" message when the history is fully sent :
 
-Server > Client : [0, "_HISTORY_KEEPER_", "MSG", Client_ID, Stringified_Message ]
-Server > Client (completed) : [0, "_HISTORY_KEEPER_", "MSG", Client_ID, 0 ]
+Server > Client : [0, "History_Keeper_Name", "MSG", Client_ID, Stringified_Message ]
+Server > Client (completed) : [0, "History_Keeper_Name", "MSG", Client_ID, 0 ]
 
 ## Example of exchanged messages
 
 *A client is connecting to the websocket server, he is given the ID "ClientC" by the server*
 
-* Server > client : [0,"IDENT","ClientC"]
+* Server > client : [0,"","IDENT","ClientC"]
 
 *"ClientC" tries to join the channel "Channel1" (existing or new channel). The server replies with the list of users connected to that channel (in the order of first connection) :*
 
 * ClientC > server : [1,"JOIN","Channel1"]
 * Server > ClientC : [1,"ACK"]
-* Server > ClientC : [0,"_HISTORY_KEEPER_","JOIN","Channel1"]
+* Server > ClientC : [0,"af54e849ec64db86","JOIN","Channel1"] (*af54e849ec64db86* is the history keeper here)
 * Server > ClientC : [0,"ClientA","JOIN","Channel1"]
 * Server > ClientC : [0,"ClientB","JOIN","Channel1"]
 * Server > ClientC : [0,"ClientC","JOIN","Channel1"]
 
 *"ClientC" asks for the history of the channel. The server will send all the messages in the right order and will then send a "0" message to notify that the history is complete :*
 
-* ClientC > server : [2,"MSG","_HISTORY_KEEPER_","[\"GET_HISTORY\",\"Channel1\"]"]
+* ClientC > server : [2,"MSG","af54e849ec64db86","[\"GET_HISTORY\",\"Channel1\"]"]
 * Server > ClientC : [2,"ACK"]
-* Server > ClientC : [0,"_HISTORY_KEEPER_","MSG","ClientC","[0,\"ClientA\",\"MSG\",\"Channel1\",\"Hello world!\"]" ]
-* Server > ClientC : [0,"_HISTORY_KEEPER_","MSG","ClientC","[0,\"ClientB\",\"MSG\",\"Channel1\",\"Hello ClientA!\"]" ]
-* Server > ClientC : [0,"_HISTORY_KEEPER_","MSG","ClientC",0]
+* Server > ClientC : [0,"af54e849ec64db86","MSG","ClientC","[0,\"ClientA\",\"MSG\",\"Channel1\",\"Hello world!\"]" ]
+* Server > ClientC : [0,"af54e849ec64db86","MSG","ClientC","[0,\"ClientB\",\"MSG\",\"Channel1\",\"Hello ClientA!\"]" ]
+* Server > ClientC : [0,"af54e849ec64db86","MSG","ClientC",0]
 
 *"ClientC" will now regurlarly send "PING" messages to check the connectivity. The server will reply with a "PONG" :*
 
