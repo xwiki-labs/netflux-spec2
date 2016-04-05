@@ -13,6 +13,7 @@ Messages exchanged between the server and the users are represented by a stringi
     * **MSG** : Message with content exchanged between two clients or broadcasted in a channel
 * Reply messages :
     * **ACK** : Acknowledgement sent by the server when receiving a command to notify that it is being processed
+    * **JACK** : Acknowledgement sent by the server when receiving a JOIN command. It contains the channel name, which is especially important for the channel creator who has no other way to know the generated name.
     * **ERROR** : Message sent by the server to notify the client that his command is invalid
 
 The messages sent to the server also have a sequence number, this number can be anything you want and it will be reflected back to you. All the messages sent by the server have have a sequence number equals to 0. If you send a message with sequence number equal to 0, your reply will have sequence number 0 but that is silly because then you cannot detect that it is not a notification.
@@ -49,15 +50,21 @@ All Server->Client response messages begin with the sequence number which corres
 
 ### **ACK**
 
-This message is a possible response to JOIN, LEAVE, MSG, and PING
+This message is a possible response to LEAVE, MSG, and PING
 
 Server > client : [Seq, "ACK"]
+
+### **JACK (Join-ACK)**
+
+This message is a possible response to JOIN
+
+Server > client : [Seq, "JACK", chanName]
 
 ### **ERROR**
 
 This message is a possible response to JOIN, LEAVE, MSG
 
-Server > client : [Seq, "ERROR", Error_type, Recipient]
+Server > client : [Seq, "ERROR", ERROR_TYPE, Error_string_content]
 
 Possible error types :
 * **ENOENT** : Invalid channel name (JOIN or LEAVE messages) or non-existing recipient (MSG messages)
@@ -116,7 +123,7 @@ Server > Client (completed) : [0, "History_Keeper_Name", "MSG", Client_ID, 0 ]
 *"ClientC" tries to join the channel "Channel1" (existing or new channel). The server replies with the list of users connected to that channel (in the order of first connection) :*
 
 * ClientC > server : [1,"JOIN","Channel1"]
-* Server > ClientC : [1,"ACK"]
+* Server > ClientC : [1,"JACK","Channel1"]
 * Server > ClientC : [0,"af54e849ec64db86","JOIN","Channel1"] (*af54e849ec64db86* is the history keeper here)
 * Server > ClientC : [0,"ClientA","JOIN","Channel1"]
 * Server > ClientC : [0,"ClientB","JOIN","Channel1"]

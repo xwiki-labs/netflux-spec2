@@ -86,7 +86,7 @@ const handleMessage = function (ctx, user, msg) {
             return;
         }
         let chanName = obj || randName();
-        sendMsg(ctx, user, [seq, 'ACK']);
+        sendMsg(ctx, user, [seq, 'JACK', chanName]);
         let chan = ctx.channels[chanName] = ctx.channels[chanName] || [];
         chan.id = chanName;
         if (USE_HISTORY_KEEPER) {
@@ -131,11 +131,11 @@ const handleMessage = function (ctx, user, msg) {
         let err;
         let chan;
         let idx;
-        if (!obj) { err = 'EINVAL'; }
+        if (!obj) { err = 'EINVAL'; obj = 'undefined';}
         if (!err && !(chan = ctx.channels[obj])) { err = 'ENOENT'; }
         if (!err && (idx = chan.indexOf(user)) === -1) { err = 'NOT_IN_CHAN'; }
         if (err) {
-            sendMsg(ctx, user, [seq, 'ERROR', err]);
+            sendMsg(ctx, user, [seq, 'ERROR', err, obj]);
             return;
         }
         sendMsg(ctx, user, [seq, 'ACK']);
