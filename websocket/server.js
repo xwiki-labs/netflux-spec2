@@ -7,6 +7,7 @@ const LAG_MAX_BEFORE_PING = 15000;
 const HISTORY_KEEPER_ID = Crypto.randomBytes(8).toString('hex');
 
 const USE_HISTORY_KEEPER = false;
+const USE_FILE_BACKUP_STORAGE = false;
 
 let dropUser;
 
@@ -153,7 +154,7 @@ let run = module.exports.run = function (storage, socketServer) {
     let ctx = {
         users: {},
         channels: {},
-        store: LogStore.create('messages.log', storage)
+        store: (USE_FILE_BACKUP_STORAGE) ? LogStore.create('messages.log', storage) : storage
     };
     setInterval(function () {
         Object.keys(ctx.users).forEach(function (userId) {
@@ -161,7 +162,7 @@ let run = module.exports.run = function (storage, socketServer) {
             if (now() - u.timeOfLastMessage > LAG_MAX_BEFORE_DISCONNECT) {
                 dropUser(ctx, u);
             } else if (!u.pingOutstanding && now() - u.timeOfLastMessage > LAG_MAX_BEFORE_PING) {
-                sendMsg(ctx, u, [0, 'PING', now()]);
+                sendMsg(ctx, u, [0, '', 'PING', now()]);
                 u.pingOutstanding = true;
             }
         });

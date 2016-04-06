@@ -84,10 +84,6 @@ const onMessage = (ctx, evt) => {
     let msg;
     try { msg = JSON.parse(evt.data); } catch (e) { console.log(e.stack); console.log(msgStr); return; }
     if (msg[0] !== 0) {
-        if (msg[1] === 'PONG') {
-            ctx.lag = now() - Number(msg[2]);
-            return;
-        }
         const req = ctx.requests[msg[0]];
         if (!req) {
             console.log("error: " + JSON.stringify(msg));
@@ -95,6 +91,12 @@ const onMessage = (ctx, evt) => {
         }
         delete ctx.requests[msg[0]];
         if (msg[1] === 'ACK') {
+            if (req.ping) { // ACK of a PING
+                ctx.lag = now() - Number(req.ping);
+                return;
+            }
+            req.resolve();
+        } else if (msg[1] === 'JACK') {
             if (req._) {
                 // Channel join request...
                 if (!msg[2]) { throw new Error("wrong type of ACK for channel join"); }
@@ -110,12 +112,15 @@ const onMessage = (ctx, evt) => {
         }
         return;
     }
-    if (msg[1] === 'IDENT') {
-        ctx.uid = msg[2];
+    if (msg[2] === 'IDENT') {
+        ctx.uid = msg[3];
 
         setInterval(() => {
             if (now() - ctx.timeOfLastMessage < MAX_LAG_BEFORE_PING) { return; }
-            ctx.ws.send(JSON.stringify([ctx.seq++, 'PING', now()]));
+            let seq = ctx.seq++;
+            let currentDate = now();
+            ctx.requests[seq] = {time: now(), ping: currentDate};
+            ctx.ws.send(JSON.stringify([seq, 'PING', currentDate]));
             if (now() - ctx.timeOfLastMessage > MAX_LAG_BEFORE_DISCONNECT) {
                 ctx.ws.close();
             }
@@ -126,7 +131,7 @@ const onMessage = (ctx, evt) => {
         // extranious message, waiting for an ident.
         return;
     }
-    if (msg[1] === 'PING') {
+    if (msg[2] === 'PING') {
         msg[1] = 'PONG';
         ws.send(JSON.stringify(msg));
         return;
@@ -182,7 +187,7 @@ const onMessage = (ctx, evt) => {
 };
 
 const connect = (websocketURL) => {
-    const ctx = {
+    let ctx = {
         ws: new WebSocket(websocketURL),
         seq: 1,
         lag: 0,
@@ -194,7 +199,7 @@ const connect = (websocketURL) => {
         requests: {}
     };
     setInterval(() => {
-        for (const id in ctx.requests) {
+        for (let id in ctx.requests) {
             const req = ctx.requests[id];
             if (now() - req.time > REQUEST_TIMEOUT) {
                 delete ctx.requests[id];
@@ -209,7 +214,7 @@ const connect = (websocketURL) => {
             try { h(evt.reason); } catch (e) { console.log(e.stack); }
         });
     };
-
+    console.log(ctx.ws);
     return new Promise((resolve, reject) => {
         ctx.ws.onopen = () => resolve(ctx.network);
     });

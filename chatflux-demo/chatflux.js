@@ -23,21 +23,10 @@ require(['/api/preconfigured-netflux.js',
             wc.on('leave', function(person, reason) {
                 logMsg('* ' + person + ' has left ' + reason);
             });
-
         }, function(error) {
             console.error(error);
         });
     });
-
-    var send = function (msg, cb) {
-        if(typeof webchannel !== "undefined") {
-            webchannel.send(msg);
-            cb();
-        }
-        else {
-            cb("Not connected to server");
-        }
-    };
 
     var main = function () {
         $backscroll = $('#chatflux-backscroll');
@@ -62,6 +51,7 @@ require(['/api/preconfigured-netflux.js',
         var send = function (msg, cb) {
             if(typeof webchannel !== "undefined") {
                 webchannel.bcast(msg);
+                logMsg('<You> ' + msg);
                 cb();
             } else {
                 cb("Not connected to server");
