@@ -4,6 +4,7 @@ define(() => {
 const MAX_LAG_BEFORE_PING = 15000;
 const MAX_LAG_BEFORE_DISCONNECT = 30000;
 const PING_CYCLE = 5000;
+const REQUEST_TIMEOUT = 5000;
 
 const now = () => new Date().getTime();
 
@@ -82,7 +83,7 @@ const mkNetwork = (ctx) => {
 
 const onMessage = (ctx, evt) => {
     let msg;
-    try { msg = JSON.parse(evt.data); } catch (e) { console.log(e.stack); console.log(msgStr); return; }
+    try { msg = JSON.parse(evt.data); } catch (e) { console.log(e.stack); return; }
     if (msg[0] !== 0) {
         const req = ctx.requests[msg[0]];
         if (!req) {
@@ -133,7 +134,7 @@ const onMessage = (ctx, evt) => {
     }
     if (msg[2] === 'PING') {
         msg[1] = 'PONG';
-        ws.send(JSON.stringify(msg));
+        ctx.ws.send(JSON.stringify(msg));
         return;
     }
 
@@ -176,6 +177,7 @@ const onMessage = (ctx, evt) => {
         chan._.members.push(msg[1]);
         if (!synced && msg[1] === ctx.uid) {
             // sync the channel join event
+            chan.myID = ctx.uid;
             chan._.resolve(chan);
         }
         if (synced) {
@@ -214,7 +216,6 @@ const connect = (websocketURL) => {
             try { h(evt.reason); } catch (e) { console.log(e.stack); }
         });
     };
-    console.log(ctx.ws);
     return new Promise((resolve, reject) => {
         ctx.ws.onopen = () => resolve(ctx.network);
     });
