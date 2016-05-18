@@ -124,7 +124,7 @@ Server > Client (completed) : [0, "History_Keeper_Name", "MSG", Client_ID, 0 ]
 
 * ClientC > server : [1,"JOIN","Channel1"]
 * Server > ClientC : [1,"JACK","Channel1"]
-* Server > ClientC : [0,"af54e849ec64db86","JOIN","Channel1"] (*af54e849ec64db86* is the history keeper here)
+* Server > ClientC : [0,"af54e849ec64db86","JOIN","Channel1"] \(*af54e849ec64db86* is the history keeper here)
 * Server > ClientC : [0,"ClientA","JOIN","Channel1"]
 * Server > ClientC : [0,"ClientB","JOIN","Channel1"]
 * Server > ClientC : [0,"ClientC","JOIN","Channel1"]
