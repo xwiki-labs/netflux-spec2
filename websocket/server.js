@@ -1,11 +1,14 @@
 ;(function () { 'use strict';
 const Crypto = require('crypto');
+const LogStore = require('./storage/LogStore');
 
 const LAG_MAX_BEFORE_DISCONNECT = 30000;
 const LAG_MAX_BEFORE_PING = 15000;
-const HISTORY_KEEPER_ID = "_HISTORY_KEEPER_";
+const HISTORY_KEEPER_ID = Crypto.randomBytes(8).toString('hex');
 
 const USE_HISTORY_KEEPER = false;
+const USE_FILE_BACKUP_STORAGE = false;
+const LOG_MESSAGES = false;
 
 let dropUser;
 
@@ -13,7 +16,7 @@ const now = function () { return (new Date()).getTime(); };
 
 const sendMsg = function (ctx, user, msg) {
     try {
-        console.log('<' + JSON.stringify(msg));
+        if (LOG_MESSAGES) { console.log('<' + JSON.stringify(msg)); }
         user.socket.send(JSON.stringify(msg));
     } catch (e) {
         console.log(e.stack);
@@ -23,7 +26,11 @@ const sendMsg = function (ctx, user, msg) {
 
 const sendChannelMessage = function (ctx, channel, msgStruct) {
     msgStruct.unshift(0);
-    channel.forEach(function (user) { sendMsg(ctx, user, msgStruct); });
+    channel.forEach(function (user) {
+      if(msgStruct[2] !== 'MSG' || user.id !== msgStruct[1]) { // We don't want to send back a message to its sender, in order to save bandwidth
+        sendMsg(ctx, user, msgStruct);
+      }
+    });
     if (USE_HISTORY_KEEPER && msgStruct[2] === 'MSG') {
         ctx.store.message(channel.id, JSON.stringify(msgStruct), function () { });
     }
@@ -60,8 +67,8 @@ dropUser = function (ctx, user) {
     });
 };
 
-const getHistory = function (ctx, channelName, handler) {
-    ctx.store.getMessages(channelName, function (msgStr) { handler(JSON.parse(msgStr)); });
+const getHistory = function (ctx, channelName, handler, cb) {
+    ctx.store.getMessages(channelName, function (msgStr) { handler(JSON.parse(msgStr)); }, cb);
 };
 
 const randName = function () { return Crypto.randomBytes(16).toString('hex'); };
@@ -80,8 +87,8 @@ const handleMessage = function (ctx, user, msg) {
             sendMsg(ctx, user, [seq, 'ERROR', 'ENOENT', obj]);
             return;
         }
-        sendMsg(ctx, user, [seq, 'ACK', chanName]);
         let chanName = obj || randName();
+        sendMsg(ctx, user, [seq, 'JACK', chanName]);
         let chan = ctx.channels[chanName] = ctx.channels[chanName] || [];
         chan.id = chanName;
         if (USE_HISTORY_KEEPER) {
@@ -95,11 +102,13 @@ const handleMessage = function (ctx, user, msg) {
     if (cmd === 'MSG') {
         if (obj === HISTORY_KEEPER_ID) {
             let parsed;
-            try { parsed = JSON.parse(json[2]); } catch (err) { return; }
+            try { parsed = JSON.parse(json[2]); } catch (err) { console.error(err); return; }
             if (parsed[0] === 'GET_HISTORY') {
-                console.log('getHistory ' + parsed[1]);
+                sendMsg(ctx, user, [seq, 'ACK']);
                 getHistory(ctx, parsed[1], function (msg) {
                     sendMsg(ctx, user, [0, HISTORY_KEEPER_ID, 'MSG', user.id, JSON.stringify(msg)]);
+                }, function () {
+                    sendMsg(ctx, user, [0, HISTORY_KEEPER_ID, 'MSG', user.id, 0]);
                 });
             }
             return;
@@ -125,19 +134,20 @@ const handleMessage = function (ctx, user, msg) {
         let err;
         let chan;
         let idx;
-        if (!obj) { err = 'EINVAL'; }
+        if (!obj) { err = 'EINVAL'; obj = 'undefined';}
         if (!err && !(chan = ctx.channels[obj])) { err = 'ENOENT'; }
         if (!err && (idx = chan.indexOf(user)) === -1) { err = 'NOT_IN_CHAN'; }
         if (err) {
-            sendMsg(ctx, user, [seq, 'ERROR', err]);
+            sendMsg(ctx, user, [seq, 'ERROR', err, obj]);
             return;
         }
+        sendMsg(ctx, user, [seq, 'ACK']);
         json.unshift(user.id);
         sendChannelMessage(ctx, chan, [user.id, 'LEAVE', chan.id]);
         chan.splice(idx, 1);
     }
     if (cmd === 'PING') {
-        sendMsg(ctx, user, [seq, 'PONG', obj]);
+        sendMsg(ctx, user, [seq, 'ACK']);
         return;
     }
 };
@@ -146,7 +156,7 @@ let run = module.exports.run = function (storage, socketServer) {
     let ctx = {
         users: {},
         channels: {},
-        store: storage
+        store: (USE_FILE_BACKUP_STORAGE) ? LogStore.create('messages.log', storage) : storage
     };
     setInterval(function () {
         Object.keys(ctx.users).forEach(function (userId) {
@@ -154,7 +164,7 @@ let run = module.exports.run = function (storage, socketServer) {
             if (now() - u.timeOfLastMessage > LAG_MAX_BEFORE_DISCONNECT) {
                 dropUser(ctx, u);
             } else if (!u.pingOutstanding && now() - u.timeOfLastMessage > LAG_MAX_BEFORE_PING) {
-                sendMsg(ctx, u, [0, 'PING', now()]);
+                sendMsg(ctx, u, [0, '', 'PING', now()]);
                 u.pingOutstanding = true;
             }
         });
@@ -169,9 +179,9 @@ let run = module.exports.run = function (storage, socketServer) {
             pingOutstanding: false
         };
         ctx.users[user.id] = user;
-        sendMsg(ctx, user, [0, 'IDENT', user.id]);
+        sendMsg(ctx, user, [0, '', 'IDENT', user.id]);
         socket.on('message', function(message) {
-            console.log('>'+message);
+            if (LOG_MESSAGES) { console.log('>'+message); }
             try {
                 handleMessage(ctx, user, message);
             } catch (e) {
