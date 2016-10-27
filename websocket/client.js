@@ -1,11 +1,18 @@
 /*global: WebSocket */
-define(function () {
+define([
+//    '/bower_components/reconnectingWebsocket/reconnecting-websocket.js',
+//    '/bower_components/es6-promise/es6-promise.min.js',
+],function (/*ReconnectingWebSocket*/) {
+    const ReconnectingWebSocket = WebSocket;
+
     'use strict';
 
     var MAX_LAG_BEFORE_PING = 15000;
     var MAX_LAG_BEFORE_DISCONNECT = 30000;
     var PING_CYCLE = 5000;
     var REQUEST_TIMEOUT = 30000;
+
+    var pingInterval = null;
 
     var now = function now() {
         return new Date().getTime();
@@ -36,8 +43,12 @@ define(function () {
         if (!chan) {
             throw new Error("no such channel " + chanId);
         }
+        var seq = ctx.seq++;
         delete ctx.channels[chanId];
-        ctx.ws.send(JSON.stringify([ctx.seq++, 'LEAVE', chanId, reason]));
+        if (ctx.ws.readyState !== 1) { return; } // the websocket connection is not opened
+        ctx.ws.send(JSON.stringify([seq, 'LEAVE', chanId, reason]));
+        var emptyFunction = function() {};
+        ctx.requests[seq] = { reject: emptyFunction, resolve: emptyFunction, time: now() };
     };
 
     var makeEventHandlers = function makeEventHandlers(ctx, mappings) {
@@ -92,7 +103,7 @@ define(function () {
             join: function join(chanId) {
                 return mkChannel(ctx, chanId);
             },
-            on: makeEventHandlers(ctx, { message: ctx.onMessage, disconnect: ctx.onDisconnect })
+            on: makeEventHandlers(ctx, { message: ctx.onMessage, disconnect: ctx.onDisconnect, reconnect: ctx.onReconnect })
         };
         network.__defineGetter__("webChannels", function () {
             return Object.keys(ctx.channels).map(function (k) {
@@ -103,7 +114,7 @@ define(function () {
     };
 
     var onMessage = function onMessage(ctx, evt) {
-        var msg;
+        var msg = void 0;
         try {
             msg = JSON.parse(evt.data);
         } catch (e) {
@@ -135,7 +146,11 @@ define(function () {
                 }
                 req.resolve();
             } else if (msg[1] === 'ERROR') {
-                req.reject({ type: msg[2], message: msg[3] });
+                if (typeof req.reject === "function") {
+                    req.reject({ type: msg[2], message: msg[3] });
+                } else {
+                    console.error(msg);
+                }
             } else {
                 req.reject({ type: 'UNKNOWN', message: JSON.stringify(msg) });
             }
@@ -145,7 +160,7 @@ define(function () {
         if (msg[2] === 'IDENT') {
             ctx.uid = msg[3];
 
-            setInterval(function () {
+            pingInterval = setInterval(function () {
                 if (now() - ctx.timeOfLastMessage < MAX_LAG_BEFORE_PING) {
                     return;
                 }
@@ -233,7 +248,7 @@ define(function () {
 
     var connect = function connect(websocketURL) {
         var ctx = {
-            ws: new WebSocket(websocketURL),
+            ws: new ReconnectingWebSocket(websocketURL),
             seq: 1,
             lag: 0,
             uid: null,
@@ -241,9 +256,14 @@ define(function () {
             channels: {},
             onMessage: [],
             onDisconnect: [],
+            onReconnect: [],
             requests: {}
         };
+        var firstConnection = true;
         setInterval(function () {
+            if (ctx.lag > REQUEST_TIMEOUT) {
+                ctx.ws.refresh();
+            }
             for (var id in ctx.requests) {
                 var req = ctx.requests[id];
                 if (now() - req.time > REQUEST_TIMEOUT) {
@@ -259,6 +279,11 @@ define(function () {
             return onMessage(ctx, msg);
         };
         ctx.ws.onclose = function (evt) {
+            ctx.uid = null;
+            ctx.lag = 0;
+            if (pingInterval) {
+                window.clearInterval(pingInterval);
+            }
             ctx.onDisconnect.forEach(function (h) {
                 try {
                     h(evt.reason);
@@ -268,20 +293,42 @@ define(function () {
             });
         };
         return new Promise(function (resolve, reject) {
+            var onReconnectHandler = function (uid) {
+                ctx.channels = {};
+                ctx.onReconnect.forEach(function (h) {
+                   try {
+                        h(uid);
+                    } catch (e) {
+                        console.log(e.stack);
+                    }
+                });
+            };
             ctx.ws.onopen = function () {
-                var count = 0;
+                window.ws = ctx.ws;
+                var onopenTime = now();
                 var interval = 100;
                 var checkIdent = function() {
-                  if(ctx.uid !== null) {
-                    return resolve(ctx.network);
-                  }
-                  else {
-                    if(count * interval > REQUEST_TIMEOUT) {
-                      return reject({ type: 'TIMEOUT', message: 'waited ' + (count * interval) + 'ms' });
+                    ctx.lag = now() - onopenTime;
+                    if(ctx.uid !== null) {
+                        if (firstConnection) {
+                            firstConnection = false;
+                            return resolve(ctx.network);
+                        }
+                        else {
+                            onReconnectHandler(ctx.uid);
+                        }
                     }
-                    setTimeout(checkIdent, 100);
-                  }
-                }
+                    else {
+                        if(ctx.lag > REQUEST_TIMEOUT) {
+                            ctx.ws.refresh();
+                            if (firstConnection) {
+                                return reject({ type: 'TIMEOUT', message: 'waited ' + ctx.lag + 'ms' });
+                            }
+                            return;
+                        }
+                        setTimeout(checkIdent, interval);
+                    }
+                };
                 checkIdent();
             };
         });
