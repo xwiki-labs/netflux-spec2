@@ -26,10 +26,4 @@ httpServer.listen(Config.port, Config.bindAddress, () => {
     console.log('listening on [%s]:%s', Config.bindAddress, Config.port);
 });
 
-Server.run(
-    {
-        getMessages: () => {},
-        message: () => {}
-    },
-    new WebSocketServer({ server: httpServer })
-);
+Server.run(new WebSocketServer({ server: httpServer }));
