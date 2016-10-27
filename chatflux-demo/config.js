@@ -6,7 +6,7 @@ module.exports = {
     bindAddress: '::',
 
     // Corripsonds to the directory for the netflux implementation.
-    netfluxImpl: 'websocket',
+    netfluxImpl: 'netflux',
 
     // Executed on the client side, contains anything you need in order to construct a Network object.
     configureNetflux: function (NetFlux) {
