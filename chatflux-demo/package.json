@@ -5,9 +5,10 @@
   "dependencies": {
     "express": "~4.10.1",
     "level": "~1.4.0",
-    "netflux": "^1.0.0-rc.3",
+    "netflux": "1.0.0-rc.14",
     "nthen": "~0.1.1",
-    "ws": "~0.4.32"
+    "ws": "~0.4.32",
+    "sigver": "^10.1.0"
   },
   "devDependencies": {
     "jshint": "~2.9.1"
