@@ -1,20 +1,17 @@
 define([], function () {
     return {
         connect: function (webSocketURL) {
-          console.log('Signaling URL = ' + webSocketURL)
             var wc = netflux.create({
                 signalingURL: webSocketURL
             });
             return wc.join('azerty')
                 .then(function () {
-                    console.log('Joining "azerty"')
                     return {
                         webChannels: [],
                         getLag: function getLag() {
                             return 50;
                         },
                         sendto: function sendto(peerId, content) {
-                            console.log('Sending |' + content + '| to ' + peerId)
                             wc.sendTo(String(peerId), content);
                             return Promise.resolve();
                         },
@@ -38,20 +35,17 @@ define([], function () {
                                       case 'message':
                                           wc.onMessage = function (peerId, msg, isBroadcast) {
                                               if (isBroadcast) {
-                                                  console.log('Broadcast Message |' + msg + '| from ' + peerId)
                                                   cb(msg, String(peerId));
                                               }
                                           }
                                           break;
                                       case 'join':
                                           wc.onPeerJoin = function (peerId) {
-                                            console.log('Joined >' + peerId)
                                             cb(String(peerId))
                                           }
                                           break;
                                       case 'leave':
                                           wc.onPeerLeave = function (peerId) {
-                                            console.log('Left >' + peerId)
                                             cb(String(peerId), 'with no reason')
                                           }
                                   }
